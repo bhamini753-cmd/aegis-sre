@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AegisSRE — Autonomous On-Call Incident Agent</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background-color: #090d16; color: #e2e8f0; font-family: Inter, system-ui, sans-serif; }
+    .glass { background: rgba(17, 24, 39, 0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.08); }
+    @keyframes pulse-red { 0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45); } 50% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } }
+    .critical-card { animation: pulse-red 1.8s infinite; border-color: #ef4444 !important; }
+  </style>
+</head>
+<body class="min-h-screen p-6">
+  <header class="max-w-7xl mx-auto flex flex-wrap justify-between items-center pb-6 border-b border-slate-800 gap-4">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-xl shadow-lg shadow-indigo-500/30">⚡</div>
+      <div>
+        <h1 class="text-2xl font-bold tracking-tight text-white">AegisSRE <span class="text-xs font-mono uppercase bg-indigo-500/20 text-indigo-300 px-2.5 py-1 rounded-full ml-2 border border-indigo-500/30">AgentX Showcase</span></h1>
+        <p class="text-sm text-slate-400">Autonomous On-Call Engineering Agent • Planning → Tool-Use → Action Workflow</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <span id="system-badge" class="px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+        ● ALL SYSTEMS OPERATIONAL
+      </span>
+      <button onclick="resetCluster()" class="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">
+        Reset Environment
+      </button>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto mt-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <section class="lg:col-span-5 space-y-6">
+      <div class="glass rounded-xl p-5">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-3">1. Chaos Outage Simulator (Inject Failure)</h2>
+        <div class="grid grid-cols-1 gap-2.5">
+          <button onclick="injectOutage('memory_leak')" class="w-full text-left px-4 py-3 rounded-lg bg-rose-950/50 hover:bg-rose-900/60 border border-rose-800/60 transition flex justify-between items-center">
+            <div>
+              <div class="font-semibold text-rose-200 text-sm">🔥 Scenario A: Payment Worker Memory Leak</div>
+              <div class="text-xs text-rose-400">Triggers HTTP 502 Bad Gateway & OOM (>95% RAM)</div>
+            </div>
+            <span class="text-xs font-mono bg-rose-500/20 text-rose-300 px-2 py-1 rounded">Inject</span>
+          </button>
+
+          <button onclick="injectOutage('auth_outage')" class="w-full text-left px-4 py-3 rounded-lg bg-amber-950/40 hover:bg-amber-900/50 border border-amber-800/60 transition flex justify-between items-center">
+            <div>
+              <div class="font-semibold text-amber-200 text-sm">🔑 Scenario B: Auth JWT Secret Mismatch</div>
+              <div class="text-xs text-amber-400">Triggers 91% HTTP 500 Auth Failure Spike</div>
+            </div>
+            <span class="text-xs font-mono bg-amber-500/20 text-amber-300 px-2 py-1 rounded">Inject</span>
+          </button>
+
+          <button onclick="injectOutage('db_lockup')" class="w-full text-left px-4 py-3 rounded-lg bg-purple-950/40 hover:bg-purple-900/50 border border-purple-800/60 transition flex justify-between items-center">
+            <div>
+              <div class="font-semibold text-purple-200 text-sm">🗄️ Scenario C: PostgreSQL Pool Exhaustion</div>
+              <div class="text-xs text-purple-400">Triggers QueuePool Timeout & 4850ms Latency</div>
+            </div>
+            <span class="text-xs font-mono bg-purple-500/20 text-purple-300 px-2 py-1 rounded">Inject</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="glass rounded-xl p-5">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-3">Live Production Cluster Telemetry</h2>
+        <div id="services-grid" class="space-y-3"></div>
+      </div>
+
+      <div class="glass rounded-xl p-5">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-3">Real-Time Container Logs</h2>
+        <pre id="logs-box" class="bg-black/70 text-xs font-mono text-emerald-400 p-3.5 rounded-lg h-48 overflow-y-auto whitespace-pre-wrap border border-slate-800"></pre>
+      </div>
+    </section>
+
+    <section class="lg:col-span-7 space-y-6">
+      <div id="incident-banner" class="glass rounded-xl p-5 border border-slate-800">
+        <div class="flex flex-wrap justify-between items-center gap-4">
+          <div>
+            <div id="alert-id" class="text-xs font-mono text-slate-400">NO ACTIVE PAGERDUTY INCIDENT</div>
+            <h2 id="alert-title" class="text-lg font-bold text-white mt-0.5">Select an outage scenario on the left to trigger an alert</h2>
+          </div>
+          <button id="run-agent-btn" onclick="runAgent()" disabled class="px-5 py-2.5 rounded-lg font-semibold text-sm bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white shadow-lg shadow-indigo-600/30 transition">
+            🤖 Launch Autonomous SRE Agent
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-3 gap-3 text-center">
+        <div id="step-plan" class="glass p-3 rounded-lg border border-slate-800">
+          <div class="text-xs font-mono text-blue-400">PHASE 1</div>
+          <div class="font-semibold text-sm mt-0.5">1. Planning & Triage</div>
+        </div>
+        <div id="step-tools" class="glass p-3 rounded-lg border border-slate-800">
+          <div class="text-xs font-mono text-amber-400">PHASE 2</div>
+          <div class="font-semibold text-sm mt-0.5">2. Tool-Use & APIs</div>
+        </div>
+        <div id="step-action" class="glass p-3 rounded-lg border border-slate-800">
+          <div class="text-xs font-mono text-emerald-400">PHASE 3</div>
+          <div class="font-semibold text-sm mt-0.5">3. Action & RCA</div>
+        </div>
+      </div>
+
+      <div class="glass rounded-xl p-5 min-h-[460px]">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-4">Autonomous Agent Reasoning & Tool Execution Trace</h2>
+        <div id="agent-feed" class="space-y-4">
+          <div class="text-center py-16 text-slate-500 text-sm">
+            Waiting for incident trigger... The agent's real-time Planning → Tool-Use → Action trace will stream here.
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    async function fetchState() {
+      const res = await fetch('/api/state');
+      const data = await res.json();
+      renderCluster(data);
+    }
+
+    function renderCluster(data) {
+      const grid = document.getElementById('services-grid');
+      grid.innerHTML = '';
+      let allLogs = [];
+
+      for (const [name, s] of Object.entries(data.services)) {
+        const isCrit = s.status === 'CRITICAL';
+        grid.innerHTML += `
+          <div class="p-3.5 rounded-lg border ${isCrit ? 'critical-card bg-rose-950/30 border-rose-500' : 'bg-slate-900/60 border-slate-800'} flex justify-between items-center">
+            <div>
+              <div class="font-semibold text-sm text-white flex items-center gap-2">
+                <span>${name}</span>
+                <span class="text-xs font-mono px-2 py-0.5 rounded ${isCrit ? 'bg-rose-500 text-white' : 'bg-emerald-500/20 text-emerald-300'}">${s.status}</span>
+              </div>
+              <div class="text-xs text-slate-400 font-mono mt-1">Version: ${s.version} • Commit: ${s.last_commit}</div>
+            </div>
+            <div class="text-right font-mono text-xs space-y-0.5">
+              <div class="${isCrit ? 'text-rose-300 font-bold' : 'text-slate-300'}">Err: ${s.error_rate_percent}% | ${s.latency_ms}ms</div>
+              <div class="text-slate-400">CPU: ${s.cpu_percent}% | RAM: ${s.memory_mb}MB</div>
+            </div>
+          </div>`;
+      }
+
+      for (const [srv, lines] of Object.entries(data.logs)) {
+        lines.forEach(l => allLogs.push(`[${srv}] ${l}`));
+      }
+      document.getElementById('logs-box').textContent = allLogs.join('\n');
+
+      const badge = document.getElementById('system-badge');
+      const btn = document.getElementById('run-agent-btn');
+      const inc = data.active_incident;
+
+      if (inc && inc.status !== 'RESOLVED') {
+        badge.className = 'px-3 py-1.5 rounded-full text-xs font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/40';
+        badge.textContent = `🚨 ACTIVE OUTAGE: ${inc.incident_id}`;
+        document.getElementById('alert-id').textContent = `${inc.incident_id} • ${inc.severity} • ${inc.service}`;
+        document.getElementById('alert-title').textContent = inc.alert_title;
+        btn.disabled = false;
+      } else {
+        badge.className = 'px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+        badge.textContent = '● ALL SYSTEMS OPERATIONAL';
+        document.getElementById('alert-id').textContent = inc ? `${inc.incident_id} • RESOLVED` : 'NO ACTIVE PAGERDUTY INCIDENT';
+        document.getElementById('alert-title').textContent = inc ? `✅ Resolved: ${inc.alert_title}` : 'Select an outage scenario on the left to trigger an alert';
+        btn.disabled = true;
+      }
+    }
+
+    async function injectOutage(scenario_id) {
+      resetPhaseHighlights();
+      document.getElementById('agent-feed').innerHTML = `
+        <div class="p-4 rounded-lg bg-rose-950/40 border border-rose-800 text-rose-200 text-sm">
+          🚨 <b>Alert Triggered!</b> Click <b>"Launch Autonomous SRE Agent"</b> above to watch the agent plan, call diagnostic tools, and remediate the outage.
+        </div>`;
+      const res = await fetch('/api/inject', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({scenario_id})
+      });
+      const data = await res.json();
+      renderCluster(data);
+    }
+
+    function resetPhaseHighlights() {
+      ['step-plan', 'step-tools', 'step-action'].forEach(id => {
+        document.getElementById(id).className = 'glass p-3 rounded-lg border border-slate-800 opacity-60';
+      });
+    }
+
+    async function runAgent() {
+      const btn = document.getElementById('run-agent-btn');
+      btn.disabled = true;
+      btn.textContent = '⚙️ Agent Executing Workflow...';
+      const feed = document.getElementById('agent-feed');
+      feed.innerHTML = '';
+
+      const res = await fetch('/api/run-agent', { method: 'POST' });
+      const data = await res.json();
+
+      for (let i = 0; i < data.trace_steps.length; i++) {
+        const step = data.trace_steps[i];
+        if (step.phase.includes('PHASE 1')) {
+          document.getElementById('step-plan').className = 'glass p-3 rounded-lg border-2 border-blue-500 bg-blue-950/30';
+        } else if (step.phase.includes('PHASE 2')) {
+          document.getElementById('step-tools').className = 'glass p-3 rounded-lg border-2 border-amber-500 bg-amber-950/30';
+        } else if (step.phase.includes('PHASE 3')) {
+          document.getElementById('step-action').className = 'glass p-3 rounded-lg border-2 border-emerald-500 bg-emerald-950/30';
+        }
+
+        const card = document.createElement('div');
+        card.className = 'p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2 transition-all';
+        card.innerHTML = `
+          <div class="flex justify-between items-center">
+            <span class="text-xs font-mono font-bold px-2.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">${step.phase}</span>
+            <span class="text-xs font-mono text-slate-400">${step.timestamp}</span>
+          </div>
+          <div class="font-bold text-white text-sm">${step.title}</div>
+          <p class="text-xs text-slate-300 leading-relaxed">${step.thought}</p>
+          ${step.plan ? `<pre class="text-xs font-mono bg-blue-950/40 border border-blue-800/60 text-blue-200 p-3 rounded-lg whitespace-pre-wrap">${step.plan}</pre>` : ''}
+          ${step.tool_name ? `
+            <div class="text-xs font-mono bg-black/60 p-3 rounded-lg border border-slate-800 space-y-1.5">
+              <div class="text-amber-300">🔧 Tool Called: <b>${step.tool_name}</b>(${JSON.stringify(step.tool_args)})</div>
+              <details class="cursor-pointer">
+                <summary class="text-slate-400 hover:text-white">View Structured Tool Output JSON</summary>
+                <pre class="mt-2 text-[11px] text-emerald-300 overflow-x-auto">${JSON.stringify(step.tool_output, null, 2)}</pre>
+              </details>
+            </div>` : ''}
+        `;
+        feed.appendChild(card);
+        await new Promise(r => setTimeout(r, 650));
+      }
+
+      renderCluster(data.updated_cluster);
+      btn.textContent = '🤖 Launch Autonomous SRE Agent';
+    }
+
+    async function resetCluster() {
+      resetPhaseHighlights();
+      const res = await fetch('/api/reset', { method: 'POST' });
+      const data = await res.json();
+      renderCluster(data);
+      document.getElementById('agent-feed').innerHTML = `
+        <div class="text-center py-16 text-slate-500 text-sm">
+          Environment reset. Trigger an outage scenario on the left to start.
+        </div>`;
+    }
+
+    fetchState();
+  </script>
+</body>
+</html>

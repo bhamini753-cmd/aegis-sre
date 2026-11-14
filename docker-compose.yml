@@ -1,0 +1,44 @@
+version: "3.9"
+
+services:
+  aegis-sre-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aegis-sre-agent
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-AEGIS-DEMO-LLM-KEY-2026}
+      - GITHUB_REPO=${GITHUB_REPO:-tiangolo/fastapi}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
+      - HOST=0.0.0.0
+      - PORT=8000
+    restart: unless-stopped
+    networks:
+      - sre-mesh
+
+  payment-service:
+    image: python:3.11-alpine
+    container_name: payment-service-worker
+    command: ["python", "-m", "http.server", "8081"]
+    ports:
+      - "8081:8081"
+    restart: always
+    networks:
+      - sre-mesh
+
+  auth-service:
+    image: python:3.11-alpine
+    container_name: auth-service-node
+    command: ["python", "-m", "http.server", "8082"]
+    ports:
+      - "8082:8082"
+    restart: always
+    networks:
+      - sre-mesh
+
+networks:
+  sre-mesh:
+    driver: bridge

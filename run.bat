@@ -1,0 +1,6 @@
+@echo off
+echo [AegisSRE] Installing dependencies...
+pip install -r requirements.txt
+echo [AegisSRE] Starting Autonomous On-Call Incident Agent on http://localhost:8000 ...
+python main.py
+pause
